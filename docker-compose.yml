@@ -1,0 +1,46 @@
+services:
+  client-frontend:
+    image: frontend:0.0.1
+    build:
+      context: ./frontend
+    restart: always
+    ports:
+      - '3000:3000'
+    volumes:
+      - /app/node_modules
+      - ./frontend:/app
+    networks:
+      - host
+    environment:
+      - BACK_IP=client-backend
+
+  client-backend:
+    image: backend:0.0.1
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8181:8181"
+    networks:
+      - host
+    depends_on:
+      - service-db
+
+  service-db:
+    image: postgres:14.7-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./backend/script.sql:/docker-entrypoint-initdb.d/create_db.sql
+      - db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+volumes:
+  db-data:
+  pgadmin-data:
+
+networks:
+  host:
+    external: true
