@@ -23,12 +23,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/incomes")
-public class IncomeController {
+public class IncomeController extends BaseController {
     
     private final IncomeService incomeService;
     private final IncomeCategoryService incomeCategoryService;
     private final AccountService accountService;
-    private final Util util;
     
     @Autowired
     public IncomeController(IncomeService incomeService, 
@@ -43,68 +42,56 @@ public class IncomeController {
     
     @GetMapping
     public ResponseEntity<?> getAllIncomes() {
-        try {
-            User user = util.getUser();
-            List<Income> incomes = incomeService.getAllIncomesByUser(user.getId());
-            return ResponseEntity.ok(incomes);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return incomeService.getAllIncomesByUser(user.getId());
+        });
     }
     
     @GetMapping("/{id}")
     public ResponseEntity<?> getIncomeById(@PathVariable Integer id) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             return incomeService.getIncomeById(id)
                 .map(income -> {
                     // Verify the income belongs to the current user
                     if (income.getUser().getId().equals(user.getId())) {
-                        return ResponseEntity.ok(income);
+                        return income;
                     } else {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        return errorResponse(HttpStatus.FORBIDDEN, "Access denied");
                     }
                 })
-                .orElse(ResponseEntity.notFound().build());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+                .orElse(errorResponse(HttpStatus.NOT_FOUND, "Income not found"));
+        });
     }
     
     @GetMapping("/account/{accountId}")
     public ResponseEntity<?> getIncomesByAccount(@PathVariable Integer accountId) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
             // Verify user has access to the account
             Account account = accountService.getById(accountId);
             if (account == null) {
-                return ResponseEntity.notFound().build();
+                return errorResponse(HttpStatus.NOT_FOUND, "Account not found");
             }
             
-            List<Income> incomes = incomeService.getAllIncomesByAccount(accountId);
-            return ResponseEntity.ok(incomes);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return incomeService.getAllIncomesByAccount(accountId);
+        });
     }
     
     @GetMapping("/date-range")
     public ResponseEntity<?> getIncomesByDateRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        try {
-            User user = util.getUser();
-            List<Income> incomes = incomeService.getIncomesByUserAndDateRange(user.getId(), startDate, endDate);
-            return ResponseEntity.ok(incomes);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return incomeService.getIncomesByUserAndDateRange(user.getId(), startDate, endDate);
+        });
     }
     
     @PostMapping
     public ResponseEntity<?> createIncome(@RequestBody Income incomeRequest) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             // Set the user for the income
             incomeRequest.setUser(user);
@@ -112,7 +99,7 @@ public class IncomeController {
             // Validate and get the account
             Account account = accountService.getById(incomeRequest.getAccount().getId());
             if (account == null) {
-                return ResponseEntity.badRequest().body("Invalid account ID");
+                return errorResponse(HttpStatus.BAD_REQUEST, "Invalid account ID");
             }
             incomeRequest.setAccount(account);
             
@@ -120,32 +107,27 @@ public class IncomeController {
             IncomeCategory category = incomeCategoryService.getCategoryById(incomeRequest.getIncomeCategory().getIncomeCategoryId())
                 .orElse(null);
             if (category == null) {
-                return ResponseEntity.badRequest().body("Invalid income category ID");
+                return errorResponse(HttpStatus.BAD_REQUEST, "Invalid income category ID");
             }
             incomeRequest.setIncomeCategory(category);
             
-            Income createdIncome = incomeService.createIncome(incomeRequest);
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdIncome);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return incomeService.createIncome(incomeRequest);
+        });
     }
     
     @PutMapping("/{id}")
     public ResponseEntity<?> updateIncome(@PathVariable Integer id, @RequestBody Income incomeRequest) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             // Check if income exists and belongs to the user
             Income existingIncome = incomeService.getIncomeById(id).orElse(null);
             if (existingIncome == null) {
-                return ResponseEntity.notFound().build();
+                return errorResponse(HttpStatus.NOT_FOUND, "Income not found");
             }
             
             if (!existingIncome.getUser().getId().equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                return errorResponse(HttpStatus.FORBIDDEN, "Access denied");
             }
             
             // Keep the original user
@@ -154,7 +136,7 @@ public class IncomeController {
             // Validate and get the account
             Account account = accountService.getById(incomeRequest.getAccount().getId());
             if (account == null) {
-                return ResponseEntity.badRequest().body("Invalid account ID");
+                return errorResponse(HttpStatus.BAD_REQUEST, "Invalid account ID");
             }
             incomeRequest.setAccount(account);
             
@@ -162,47 +144,40 @@ public class IncomeController {
             IncomeCategory category = incomeCategoryService.getCategoryById(incomeRequest.getIncomeCategory().getIncomeCategoryId())
                 .orElse(null);
             if (category == null) {
-                return ResponseEntity.badRequest().body("Invalid income category ID");
+                return errorResponse(HttpStatus.BAD_REQUEST, "Invalid income category ID");
             }
             incomeRequest.setIncomeCategory(category);
             
-            Income updatedIncome = incomeService.updateIncome(id, incomeRequest);
-            return ResponseEntity.ok(updatedIncome);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return incomeService.updateIncome(id, incomeRequest);
+        });
     }
     
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteIncome(@PathVariable Integer id) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             // Check if income exists and belongs to the user
             Income existingIncome = incomeService.getIncomeById(id).orElse(null);
             if (existingIncome == null) {
-                return ResponseEntity.notFound().build();
+                return errorResponse(HttpStatus.NOT_FOUND, "Income not found");
             }
             
             if (!existingIncome.getUser().getId().equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                return errorResponse(HttpStatus.FORBIDDEN, "Access denied");
             }
             
             incomeService.deleteIncome(id);
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return "Income deleted successfully";
+        });
     }
     
     @GetMapping("/analysis/total")
     public ResponseEntity<?> getTotalIncome(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             // If dates not provided, use current month
             if (startDate == null || endDate == null) {
@@ -218,18 +193,16 @@ public class IncomeController {
             response.put("endDate", endDate);
             response.put("totalIncome", totalIncome);
             
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return response;
+        });
     }
     
     @GetMapping("/analysis/by-category")
     public ResponseEntity<?> getIncomeByCategory(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             // If dates not provided, use current month
             if (startDate == null || endDate == null) {
@@ -246,16 +219,14 @@ public class IncomeController {
             response.put("endDate", endDate);
             response.put("categoryTotals", categoryTotals);
             
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return response;
+        });
     }
     
     @GetMapping("/analysis/monthly")
     public ResponseEntity<?> getMonthlyIncome() {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             Map<YearMonth, BigDecimal> monthlyTotals = incomeService.getMonthlyIncomeForUser(user.getId());
             
@@ -264,16 +235,14 @@ public class IncomeController {
             monthlyTotals.forEach((yearMonth, amount) -> 
                 response.put(yearMonth.toString(), amount));
             
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return response;
+        });
     }
     
     @GetMapping("/analysis/current-month")
     public ResponseEntity<?> getCurrentMonthIncome() {
-        try {
-            User user = util.getUser();
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
             
             BigDecimal currentMonthIncome = incomeService.getCurrentMonthIncomeForUser(user.getId());
             
@@ -281,9 +250,7 @@ public class IncomeController {
             response.put("month", YearMonth.now().toString());
             response.put("totalIncome", currentMonthIncome);
             
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            return response;
+        });
     }
 }

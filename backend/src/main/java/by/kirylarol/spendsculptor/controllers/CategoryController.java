@@ -8,6 +8,7 @@ import by.kirylarol.spendsculptor.service.AccountUserService;
 import by.kirylarol.spendsculptor.service.CategoryService;
 import by.kirylarol.spendsculptor.utils.Util;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,11 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-public class CategoryController {
+public class CategoryController extends BaseController {
 
-    Util util;
-    CategoryService categoryService;
-    AccountUserService accountUserService;
+    private final CategoryService categoryService;
+    private final AccountUserService accountUserService;
 
     @Autowired
     public CategoryController(Util util, CategoryService categoryService, AccountUserService accountUserService) {
@@ -31,8 +31,8 @@ public class CategoryController {
     }
 
     @GetMapping("categories/all")
-    List<Category> getAll() throws Exception {
-        User user = util.getUser();
+    public List<Category> getAll() throws Exception {
+        User user = getAuthenticatedUser();
         List<Category> categoryList = categoryService.findAllByUser(user.getId());
         if (categoryList.isEmpty()){
             categoryList.add(new Category("Без категории"));
@@ -41,12 +41,13 @@ public class CategoryController {
     }
 
     @GetMapping("account/{accountid}/receipts/categories")
-    List<CategoryWithPositionsDTO> getSpendsByCategories(@PathVariable int accountid) throws Exception{
-        User user = util.getUser();
+    public List<CategoryWithPositionsDTO> getSpendsByCategories(@PathVariable int accountid) throws Exception {
+        User user = getAuthenticatedUser();
 
-        if (user == null || accountUserService.getByUserAndAccount(accountid, user.getId()) == null){
+        if (accountUserService.getByUserAndAccount(accountid, user.getId()) == null){
             throw new Exception("Нет доступа к этому аккаунту");
         }
+        
         int accountuserid = accountUserService.getByUserAndAccount(accountid, user.getId()).getId();
         List<Category> categoryList = categoryService.findAllByAccountUser(accountuserid);
         categoryList.forEach(
@@ -55,12 +56,12 @@ public class CategoryController {
                                 position -> position.getReceipt().getAccount().getId() == accountuserid
                         ).toList())
         );
+        
         List<CategoryWithPositionsDTO> categoryWithPositionsDTOList = new ArrayList<>();
         categoryList.forEach(
-                category -> {
-                    categoryWithPositionsDTOList.add(new CategoryWithPositionsDTO(category));
-                }
+                category -> categoryWithPositionsDTOList.add(new CategoryWithPositionsDTO(category))
         );
+        
         return categoryWithPositionsDTOList;
     }
     
@@ -70,98 +71,79 @@ public class CategoryController {
     public ResponseEntity<?> setSpendingLimit(
             @PathVariable int categoryId,
             @RequestParam Double limit,
-            @RequestParam(required = false) Integer threshold) throws Exception {
+            @RequestParam(required = false) Integer threshold) {
         
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        Category category = categoryService.getById(categoryId);
-        if (category == null) {
-            return ResponseEntity.status(404).body("Category not found");
-        }
-        
-        Category updatedCategory = categoryService.setSpendingLimit(categoryId, limit, threshold);
-        return ResponseEntity.ok(updatedCategory);
+        return executeAuthenticatedOperation(() -> {
+            Category category = categoryService.getById(categoryId);
+            if (category == null) {
+                return errorResponse(HttpStatus.NOT_FOUND, "Category not found");
+            }
+            
+            Category updatedCategory = categoryService.setSpendingLimit(categoryId, limit, threshold);
+            return updatedCategory;
+        });
     }
     
     @GetMapping("categories/{categoryId}/spending")
-    public ResponseEntity<?> getCategorySpending(@PathVariable int categoryId) throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        Category category = categoryService.getById(categoryId);
-        if (category == null) {
-            return ResponseEntity.status(404).body("Category not found");
-        }
-        
-        Double currentSpending = categoryService.getCurrentMonthSpending(categoryId);
-        Double percentage = categoryService.getSpendingPercentage(categoryId);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("category", category);
-        response.put("currentMonthSpending", currentSpending);
-        response.put("limit", category.getSpendingLimit());
-        response.put("percentage", percentage);
-        
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> getCategorySpending(@PathVariable int categoryId) {
+        return executeAuthenticatedOperation(() -> {
+            Category category = categoryService.getById(categoryId);
+            if (category == null) {
+                return errorResponse(HttpStatus.NOT_FOUND, "Category not found");
+            }
+            
+            Double currentSpending = categoryService.getCurrentMonthSpending(categoryId);
+            Double percentage = categoryService.getSpendingPercentage(categoryId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("category", category);
+            response.put("currentMonthSpending", currentSpending);
+            response.put("limit", category.getSpendingLimit());
+            response.put("percentage", percentage);
+            
+            return response;
+        });
     }
     
     @GetMapping("categories/check-limits")
-    public ResponseEntity<?> checkCategoryLimits() throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        categoryService.checkCategoryLimits(user.getId());
-        return ResponseEntity.ok("Limits checked successfully");
+    public ResponseEntity<?> checkCategoryLimits() {
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            categoryService.checkCategoryLimits(user.getId());
+            return "Limits checked successfully";
+        });
     }
     
     @GetMapping("notifications")
-    public ResponseEntity<?> getUserNotifications() throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        List<CategoryLimitNotification> notifications = categoryService.getUserNotifications(user.getId());
-        return ResponseEntity.ok(notifications);
+    public ResponseEntity<?> getUserNotifications() {
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return categoryService.getUserNotifications(user.getId());
+        });
     }
     
     @GetMapping("notifications/unread")
-    public ResponseEntity<?> getUnreadUserNotifications() throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        List<CategoryLimitNotification> notifications = categoryService.getUnreadUserNotifications(user.getId());
-        return ResponseEntity.ok(notifications);
+    public ResponseEntity<?> getUnreadUserNotifications() {
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return categoryService.getUnreadUserNotifications(user.getId());
+        });
     }
     
     @PostMapping("notifications/{notificationId}/read")
-    public ResponseEntity<?> markNotificationAsRead(@PathVariable int notificationId) throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        categoryService.markNotificationAsRead(notificationId);
-        return ResponseEntity.ok("Notification marked as read");
+    public ResponseEntity<?> markNotificationAsRead(@PathVariable int notificationId) {
+        return executeAuthenticatedOperation(() -> {
+            categoryService.markNotificationAsRead(notificationId);
+            return "Notification marked as read";
+        });
     }
     
     @PostMapping("notifications/read-all")
-    public ResponseEntity<?> markAllNotificationsAsRead() throws Exception {
-        User user = util.getUser();
-        if (user == null) {
-            return ResponseEntity.status(401).body("User not authenticated");
-        }
-        
-        categoryService.markAllNotificationsAsRead(user.getId());
-        return ResponseEntity.ok("All notifications marked as read");
+    public ResponseEntity<?> markAllNotificationsAsRead() {
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            categoryService.markAllNotificationsAsRead(user.getId());
+            return "All notifications marked as read";
+        });
     }
 }
