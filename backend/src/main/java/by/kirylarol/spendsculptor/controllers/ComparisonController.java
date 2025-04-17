@@ -5,7 +5,6 @@ import by.kirylarol.spendsculptor.service.ComparisonService;
 import by.kirylarol.spendsculptor.utils.Util;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,10 +13,9 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/comparison")
-public class ComparisonController {
+public class ComparisonController extends BaseController {
     
     private final ComparisonService comparisonService;
-    private final Util util;
     
     @Autowired
     public ComparisonController(ComparisonService comparisonService, Util util) {
@@ -31,14 +29,11 @@ public class ComparisonController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1End,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2End) {
-        try {
-            User user = util.getUser();
-            Map<String, Object> result = comparisonService.compareExpenses(
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return comparisonService.compareExpenses(
                 user.getId(), period1Start, period1End, period2Start, period2End);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        });
     }
     
     @GetMapping("/income")
@@ -47,14 +42,11 @@ public class ComparisonController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1End,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2End) {
-        try {
-            User user = util.getUser();
-            Map<String, Object> result = comparisonService.compareIncome(
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return comparisonService.compareIncome(
                 user.getId(), period1Start, period1End, period2Start, period2End);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        });
     }
     
     @GetMapping("/net-income")
@@ -63,14 +55,11 @@ public class ComparisonController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1End,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2End) {
-        try {
-            User user = util.getUser();
-            Map<String, Object> result = comparisonService.compareNetIncome(
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return comparisonService.compareNetIncome(
                 user.getId(), period1Start, period1End, period2Start, period2End);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        });
     }
     
     @GetMapping("/expenses-by-category")
@@ -79,14 +68,11 @@ public class ComparisonController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1End,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2End) {
-        try {
-            User user = util.getUser();
-            Map<String, Object> result = comparisonService.compareExpensesByCategory(
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return comparisonService.compareExpensesByCategory(
                 user.getId(), period1Start, period1End, period2Start, period2End);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        });
     }
     
     @GetMapping("/income-by-category")
@@ -95,24 +81,19 @@ public class ComparisonController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period1End,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2Start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate period2End) {
-        try {
-            User user = util.getUser();
-            Map<String, Object> result = comparisonService.compareIncomeByCategory(
+        return executeAuthenticatedOperation(() -> {
+            User user = getAuthenticatedUser();
+            return comparisonService.compareIncomeByCategory(
                 user.getId(), period1Start, period1End, period2Start, period2End);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        });
     }
     
     @GetMapping("/predefined-periods")
     public ResponseEntity<?> getPredefinedPeriods() {
-        try {
-            util.getUser(); // Verify user is authenticated
-            Map<String, Map<String, LocalDate>> predefinedPeriods = comparisonService.getPredefinedPeriods();
-            return ResponseEntity.ok(predefinedPeriods);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        return executeAuthenticatedOperation(() -> {
+            // Just verify user is authenticated, no need to use the user object
+            getAuthenticatedUser();
+            return comparisonService.getPredefinedPeriods();
+        });
     }
 }
